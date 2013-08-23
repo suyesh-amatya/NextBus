@@ -1,0 +1,454 @@
+﻿<!DOCTYPE html>
+<html>
+    <head>
+    	<meta charset="utf-8">
+        <title>NextBus Application</title>
+                
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        
+        <link rel="stylesheet" href="http://code.jquery.com/mobile/1.3.1/jquery.mobile-1.3.1.min.css" />
+		
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+        <script src="http://code.jquery.com/mobile/1.3.1/jquery.mobile-1.3.1.min.js"></script>
+        <script type="text/javascript" 
+        	src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJWtBGtXPE9BeyZyEc8lFvi3I0fs_-7mY&sensor=false"></script>
+         <script type="text/javascript" src="markerwithlabel_packed.js"></script>
+        
+        <style type="text/css">
+			
+			html { height: 100%; }
+			
+			body { height: 100%; margin: 0; padding: 0; }
+			
+			#map-page{ height: 100%; }
+			
+			#map-canvas {
+				padding: 0;
+				position : absolute !important; 
+				top : 40px !important;  
+				right : 0; 
+				bottom : 0px !important;  
+				left : 0 !important;     
+			}
+			
+			#mypanel .ui-panel-inner{height: 40px !important;}
+			
+			.labels {
+				color: red;
+				background-color: white;
+				font-family: "Lucida Grande", "Arial", sans-serif;
+				font-size: 10px;
+				font-weight: bold;
+				text-align: center;
+				/*width: 40px;*/     
+				border: 2px solid black;
+				white-space: nowrap;
+			}
+        </style>
+        
+        
+        <script>
+			$(document).on("pageinit", "#map-page", function(){
+				var defaultLatLng = new google.maps.LatLng(56.8517843, 14.828458);  // Default somewhere to Växjö when no geolocation support
+				
+				if(navigator.geolocation){
+					var currentLatitude, currentLongitude;
+					
+					/*The ajax response function parseXml is defined before the ajax call itslef because for some strange reason there is 
+					"ReferenceError: parseXml is not defined" error for Firefox.*/
+					function parseXml(xml) {
+						// Find the users current position.  Cache the location for 5 minutes, timeout after 6 seconds
+						navigator.geolocation.getCurrentPosition(success, fail, {maximumAge: 500000, enableHighAccuracy:true, timeout: 6000});
+						
+						function success(pos) {
+							var stations = [];
+							currentLatitude = pos.coords.latitude;
+							currentLongitude = pos.coords.longitude;
+							//Experiment different geolocation positions by hardcoding latlng values.
+							//currentLatitude = 56.8541479;
+							//currentLongitude = 14.8541472;
+							
+							var origin = new google.maps.LatLng(currentLatitude, currentLongitude);
+							var originName;
+							
+							//Sample Google Reverse Geocoding API Web Service Request
+							//http://maps.googleapis.com/maps/api/geocode/json?latlng=56.851791000000006,14.828497500000001&sensor=false
+							$.get('http://maps.googleapis.com/maps/api/geocode/json?latlng='+currentLatitude+
+								  ','+currentLongitude+'&sensor=false', function(data) {
+								originName = data.results[0].formatted_address.split(",")[0];
+							}, 'json');
+							
+							var allStations = $(xml).find('station');
+							var stationsLength = allStations.length;
+							var counter = 0;
+							allStations.each(function(){
+								
+								/*
+								** The Server-side Google Distance Matrix API Web Services Method
+								*/
+								/*
+								var name = $(this).find("name").text();
+								var localurl = $(this).find("localurl").text();
+								var latitude = $(this).find("latitude").text();
+								var longitude = $(this).find("longitude").text();
+								calculateDistance(latitude, longitude, function(distanceFromCallback, durationFromCallback){
+									//alert(distanceFromCallback+" "+durationFromCallback);
+									stations.push({"name": name, "localurl": localurl, "latitude": latitude, 
+												  "longitude": longitude, "distance": distanceFromCallback, "duration": durationFromCallback});
+									//console.log(JSON.stringify(stations));
+								});
+													
+								//console.log(JSON.stringify(stations)); //<-- This statement prints an empty array. Beacuse it is already executed  	                                                                     //  before asynchronously while the function caculateDistance gets the 		                                                                         //  value back from the callback to populate the stations array.
+
+								
+								/*
+								** The Client-side Google Distance Matrix Service JavaScript API v3 Method
+								*/
+								
+								var name = $(this).find("name").text();
+								var localurl = $(this).find("localurl").text();
+								var latitude = $(this).find("latitude").text();
+								var longitude = $(this).find("longitude").text();
+								var destination = new google.maps.LatLng(latitude, longitude);
+								
+								var service = new google.maps.DistanceMatrixService();
+								service.getDistanceMatrix(
+									{
+										origins: [origin],
+										destinations: [destination],
+										travelMode: google.maps.TravelMode.WALKING
+									}, function(response, status) {calculatedDistanceResponse(response, status, cbAfterAllStationsPopulated)});
+								
+								function calculatedDistanceResponse(response, status, callback){
+									if (status == google.maps.DistanceMatrixStatus.OK) {
+										var origins = response.originAddresses;
+										
+										for (var i = 0; i < origins.length; i++) {
+											var results = response.rows[i].elements;
+											for (var j = 0; j < results.length; j++) {
+												var element = results[j];
+												var distance = element.distance.text;
+												var duration = element.duration.text;
+												
+												stations.push({"name": name, "localurl": localurl, "latitude": latitude, 
+												  "longitude": longitude, "distance": distance, "duration": duration});
+												
+												counter++;
+												if(counter === stationsLength)
+													callback();
+											}
+										}
+									}
+
+								}
+
+							});
+							
+							function cbAfterAllStationsPopulated(){
+								var stationsAlphabetically = stations.sort(function(a,b){
+									var textA = a.name;
+									var textB = b.name;
+									return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+								});
+								
+								$.each(stationsAlphabetically, function(key, val){
+									var htmlStr = '<li><a href=\"#\" id=\"'+val.name+'\" data-localurl=\"'+val.localurl+'\"                                                   data-latitude=\"'+val.latitude+'\" data-longitude=\"'+val.longitude+'\"                                                   data-distance=\"'+val.distance+'\" data-duration=\"'+val.duration+'\">'+val.name+'</a></li>';
+									$("#mypanel ul").append(htmlStr);
+									
+								});
+								$( "#mylist" ).listview("refresh");
+								
+
+								$('#mylist').children().each(function(){
+									var anchor = $(this).find('a');
+										if(anchor.attr('id') != null){
+											anchor.click(function(){
+												var latlngboundsForPanelLocation = new google.maps.LatLngBounds();
+												$("#mypanel").panel("close");
+												var panelStation = [];
+												
+												panelStation.push({"name": anchor.attr('id'), "localurl": $(this).data('localurl'),
+															    "latitude": $(this).data('latitude'), "longitude": $(this).data('longitude'),
+																"distance": $(this).data('distance'), "duration": $(this).data('duration')});
+												
+												latlngboundsForPanelLocation.extend(new google.maps.LatLng(panelStation[0].latitude,
+																								panelStation[0].longitude));
+												latlngboundsForPanelLocation.extend(origin);
+												
+												drawMap(origin, panelStation, latlngboundsForPanelLocation);
+												
+											});
+										}
+								});
+								
+								
+								var stationsSorted = stations.sort(function(a,b){
+									return parseFloat(a.distance) - parseFloat(b.distance)
+								});
+								
+								var nearestFiveStations = [];
+								//Appropriate zoom level to fit in all the markers in the map.
+								var latlngbounds = new google.maps.LatLngBounds();
+								
+								for(var i = 0; i < 5; i++){
+									nearestFiveStations.push(stationsSorted[i]);
+									latlngbounds.extend(new google.maps.LatLng(nearestFiveStations[i].latitude, nearestFiveStations[i].longitude));
+								}
+								
+								drawMap(origin, nearestFiveStations, latlngbounds);
+								
+								function drawMap(currentLatLng, otherLocations, bounds) {
+									var myMapOptions = {
+										//zoom: 14,
+										//center: currentLatLng, // center the map to the current geolocation
+										mapTypeId: google.maps.MapTypeId.ROADMAP
+									};
+									var map = new google.maps.Map(document.getElementById("map-canvas"), myMapOptions);
+									
+									// Add a current lat/lng geolocation overlay to the map center
+									var markerCurrentLocation = new MarkerWithLabel({
+										position: currentLatLng,
+										map: map,				// makes marker.setMap(map); redundant
+										title: "Current Location!",
+										labelContent: "Current Location!",
+										labelAnchor: new google.maps.Point(22, 0),
+										labelClass: "labels",
+										labelStyle: {opacity: 0.60}
+									});
+									
+									
+									var iconImage = 'images/bus.png';
+									// Add overlays to other locations
+									$.each(otherLocations, function(index, value){
+										var markerOtherLocations = new MarkerWithLabel({
+											position: new google.maps.LatLng(value.latitude, value.longitude),
+											map: map,
+											title: value.name+" "+value.distance,
+											icon: iconImage,
+											labelContent: value.name+" "+value.distance,
+										    labelAnchor: new google.maps.Point(50, 0),
+										    labelClass: "labels", // the CSS class for the label
+											labelStyle: {opacity: 0.60}
+										});
+										
+										
+										google.maps.event.addListener(markerOtherLocations, 'click', function() {
+											$.when(callAjax()).done(function(a){
+												//window.location.href = "http://localhost/NextBus/index.html#detail"; // Redirect without AJAX
+												$.mobile.changePage("#detail-page", { transition: "flip"} ); // Redirect with AJAX
+											});
+											
+											/* In case of repeated requests after certain interval
+											setInterval(function(){				// Another way to call setInterval(callAjax, 5000);
+												callAjax();
+											}, 60000);
+											*/
+										});
+										
+										function callAjax(){
+											//var pieces = value.localurl.split("//crossplatform.co.nf/");
+											//var tempurl = pieces[0]+"//"+"localhost/NextBus/"+pieces[1];
+											$.ajax({                                      
+												url: 'process.php?url='+encodeURIComponent(value.localurl),
+												dataType: 'json',
+												success: function(data){
+													$("#detail-page h1").html(data[1]);
+													$("#contbl").empty();
+													
+													var thdata1 = "<th>"+data[2]+"</th>";
+													var thdata2 = "<th>"+data[3]+"</th>";
+													var thdata3 = "<th>"+data[4]+"</th>";
+													var thdata4 = "<th>"+data[6]+"</th>";
+													var tblrow = $("<tr></tr>");
+													var thead = $("<thead></thead>");
+													var table = $("<table data-role=\"table\" id=\"time-table\""+
+																      "data-mode=\"reflow\" class=\"ui-responsive table-stroke\">");
+													
+													tblrow.append(thdata1);
+													tblrow.append(thdata2);
+													tblrow.append(thdata3);
+													tblrow.append(thdata4);
+													
+													thead.append(tblrow);
+													table.append(thead)
+													
+													var row = $("<tr>");
+													var flag = 0;
+													var tbody = $('<tbody>');
+													$.each(data, function(key, val){
+														if(key >= 8){
+															if(key%4 != 3){
+																if(flag == 0)
+																	row.append("<th>"+val+"</th>");
+																else
+																	row.append("<td>"+val+"</td>");
+																flag++;
+															}
+															else if(key%4 == 3){
+																row.append("<td>"+val+"</td>");
+																tbody.append(row);
+																row = $("<tr>");
+																flag = 0;
+															}
+															
+														}
+														
+													});
+													table.append(tbody);
+													table.appendTo("#contbl");
+													$('#detail-page').trigger('pagecreate');
+												}
+											});
+										}
+										
+										
+									});
+									
+									map.fitBounds(bounds);
+									
+								}
+							}
+						}
+						
+						function fail(error) {
+							if(error.code == 1) alert("The user denied the permission!");
+							else if(error.code == 2) alert("Network down or position unavailable");
+							else if(error.code == 3) alert("Taking too long! Timed Out!");
+							drawDefaultMap();
+						}
+								
+					}
+					
+					$.ajax({
+						type: "GET",
+						url: "busstations.xml",
+						dataType: "xml",
+						success: parseXml
+					});
+					
+					
+					/*
+					** The Server-side Google Distance Matrix API Web Services Method
+					*/
+					
+/*					function calculateDistance(latitude, longitude, callback){
+						//Sample Google Distance Matrix API Web Service Request
+						//http://maps.googleapis.com/maps/api/distancematrix/json?
+						//		origins=56.8517837,14.8284759&destinations=56.91869459999999,14.85939390&mode=walking&sensor=false
+						$.get('http://maps.googleapis.com/maps/api/distancematrix/json?origins='
+							  +currentLatitude+','+currentLongitude+'&destinations='+latitude+
+							   ','+longitude+'&mode=walking&sensor=false', function(data) {
+							//console.log(data);
+							//console.log(data.rows[0].elements[0].distance.text);
+							//console.log(data.rows[0].elements[0].duration.text);
+							//console.log('Current Latitude:'+ currentLatitude+' Current Longitude:' + currentLongitude);
+							//console.log('Latitude:'+ latitude+' Longitude:' + longitude);
+							callback(data.rows[0].elements[0].distance.text, data.rows[0].elements[0].duration.text);
+						}, 'json');
+					}
+*/					
+				
+				}
+				else{
+					alert("Browser doesn't support geolocation!");
+					drawDefaultMap();
+				}
+				
+				function drawDefaultMap(){
+					var map = new google.maps.Map(document.getElementById("map-canvas"), 
+														{
+															zoom: 10,
+															center: defaultLatLng,
+															mapTypeId: google.maps.MapTypeId.ROADMAP
+														}
+					);
+							
+					var marker = new google.maps.Marker({
+						position: defaultLatLng,
+						map: map,
+						title: "Somewhere in Växjö!"
+					});
+				}
+			
+				// Swipe to open the panel.
+				/*$( document ).on( "swiperight", "#map-page", function( e ) {
+					// We check if there is no open panel on the page because otherwise
+					// a swipe to close the left panel would also open the right panel (and v.v.).
+					// We do this by checking the data that the framework stores on the page element (panel: open).
+					if ( $.mobile.activePage.jqmData( "panel" ) !== "open" ) {
+						if ( e.type === "swiperight" ) {
+							$( "#mypanel" ).panel( "open" );
+						}
+					}
+				});*/
+			
+			});
+			
+			
+
+/*			function refreshPage() {
+				//window.location.href="index.html";
+				$.mobile.changePage(
+					window.location.href,
+					{
+						allowSamePageTransition : true,
+						transition              : 'none',
+						showLoadMsg             : false,
+						reloadPage              : true
+					}
+			  	);
+			}
+*/			
+			
+		</script>
+    </head>
+
+    <body>
+    
+        <div data-role="page" id="map-page" data-url="map-page">
+            
+            <div data-role="panel" id="mypanel" data-theme="a">
+                <ul data-role="listview" data-theme="a" id="mylist">
+                	<li data-icon="delete"><a href="#map-page" data-rel="close">Close menu</a></li>
+                    <li data-role="list-divider">Stations</li>
+                    <!--  Remaining panel content will be added dynamically here -->
+                </ul>
+            </div><!-- /panel -->
+            
+            <div data-role="header">
+            	<a href="#mypanel" data-role="button" data-icon="bars" data-iconpos="notext">Choose Station</a>
+                <h1>NextBus App</h1>
+                <!--<a href="javascript:refreshPage();" data-role="button" data-icon="refresh" data-iconpos="notext">Refresh</a>-->
+                <a href="index.html" data-ajax="false" data-role="button" data-icon="refresh" data-iconpos="notext">Refresh</a>
+            </div><!-- /header -->
+            
+            <div data-role="content" id="map-canvas"> <!--Div for map display.-->
+                <!--<p>Page content goes here.</p>-->
+            </div><!-- /content -->
+            
+            <div data-role="footer" data-id="myfooter" class="ui-bar" data-position="fixed">
+                <h4>© 2013 Suyesh Amatya</h4>
+            </div><!-- /footer -->
+        
+        </div><!-- /page -->
+        
+        
+        <div data-role="page" id="detail-page">
+			
+            <div data-role="header" data-position="fixed">
+            	<a href="#map-page" data-icon="home" data-iconpos="notext" data-rel="back">Home</a>
+				<h1>Timings for station: </h1>
+			</div><!-- /header -->
+			
+            <div data-role="content" id="contbl">
+            	<!-- tabular display -->
+			</div><!-- /content -->
+			
+            <div data-role="footer" data-position="fixed">
+				<h1>© 2013 Suyesh Amatya</h1>
+			</div><!-- /footer -->
+            
+		</div><!-- /page -->
+    
+    </body>
+</html>

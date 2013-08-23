@@ -1,0 +1,3 @@
+An HTML5 jQuery Mobile Bus application to see the real time departures from various bus stations in V�xj�, Sweden. Dummy data saved offline has been used, as the online version of data source went down.
+
+It basically makes use of Google Maps API v3 and Geolocation API. Tracking the user's location it automatically shows the nearest five bus stations in the form of interactive map, which when clicked displays the real time departures from that particular station. The user also has the option to choose a station manually if he/she wishes to see the departures for that station. The functionalities work only if you view it from Växjö or simulate the latlng coordinates of Växjö in the code which has been commented.
